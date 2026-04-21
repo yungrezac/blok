@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok Live Блокировщик</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Montserrat', sans-serif;
+            background-color: transparent; /* Прозрачный фон для OBS */
+            overflow: hidden;
+            color: white;
+        }
+
+        /* Анимация пульсации для текста блокировки */
+        @keyframes pulse-red {
+            0%, 100% { color: #ff0050; text-shadow: 0 0 10px rgba(255, 0, 80, 0.5); }
+            50% { color: #ff4d85; text-shadow: 0 0 20px rgba(255, 0, 80, 0.8); }
+        }
+
+        .text-tiktok-red {
+            animation: pulse-red 2s infinite;
+        }
+
+        /* Анимация сдвига для бегущей строки спонсоров */
+        .marquee-container {
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .marquee-content {
+            display: inline-block;
+            animation: marquee 15s linear infinite;
+        }
+
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        /* Прозрачность при нормальном состоянии */
+        #normal-screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            transition: opacity 0.5s ease;
+        }
+
+        /* Черный экран блокировки */
+        #blocked-screen {
+            position: absolute;
+            inset: 0;
+            background-color: #000000;
+            display: none; /* Скрыт по умолчанию */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        
+        #blocked-screen.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* Панель для тестирования (скрыта в OBS, видна при наведении мышкой) */
+        #debug-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+        #debug-panel:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Экран обычной трансляции (прозрачный) -->
+    <div id="normal-screen">
+        <!-- Список спонсоров снизу -->
+        <div id="sponsors-bar" class="bg-black/60 backdrop-blur-sm border-t border-[#ff0050] p-3 text-lg font-bold shadow-lg hidden">
+            <div class="flex items-center">
+                <span class="text-[#00f2fe] mr-4 whitespace-nowrap">Спонсоры следующих 15 минут:</span>
+                <div class="marquee-container flex-1">
+                    <div id="sponsors-list" class="marquee-content text-white">
+                        <!-- Здесь будут спонсоры -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Черный экран блокировки -->
+    <div id="blocked-screen">
+        <h1 class="text-6xl md:text-8xl font-black mb-6 text-tiktok-red uppercase tracking-wider text-center">
+            Просмотр<br>Заблокирован
+        </h1>
+        <p class="text-2xl md:text-3xl font-bold mb-8 text-center text-gray-300">
+            Для продолжения стрима пополните на <span class="text-[#00f2fe] text-4xl">300</span> монет
+        </p>
+        
+        <div class="bg-gray-800 rounded-full w-3/4 max-w-2xl h-12 relative overflow-hidden mb-4 border-2 border-gray-600">
+            <div id="progress-bar" class="bg-gradient-to-r from-[#ff0050] to-[#00f2fe] h-full w-0 transition-all duration-500 ease-out"></div>
+            <div class="absolute inset-0 flex items-center justify-center font-bold text-xl drop-shadow-md">
+                Осталось: <span id="coins-left" class="ml-2 text-2xl">300</span>
+            </div>
+        </div>
+        
+        <div class="mt-8 text-gray-400 text-lg">
+            Отправляйте подарки, чтобы разблокировать экран!
+        </div>
+        
+        <!-- Мини-список тех, кто уже скинул во время блокировки -->
+        <div id="current-donors" class="mt-6 flex flex-wrap gap-2 justify-center max-w-3xl">
+            <!-- Доноры -->
+        </div>
+    </div>
+
+    <!-- Дебаг панель (для тестирования) -->
+    <div id="debug-panel">
+        <div class="text-xs text-gray-400 mb-2">DEBUG PANEL (Наведите для использования)</div>
+        <div class="text-white mb-2">Таймер до блокировки: <span id="debug-timer">900</span> сек.</div>
+        <button onclick="app.triggerBlock()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm mr-2">Вызвать блокировку</button>
+        <button onclick="app.simulateGift()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">Симулировать подарок (50)</button>
+    </div>
+
+    <script>
+        // === ОСНОВНАЯ ЛОГИКА ПРИЛОЖЕНИЯ ===
+        const app = {
+            // Настройки
+            BLOCK_INTERVAL_SEC: 15 * 60, // 15 минут в секундах
+            GOAL_AMOUNT: 300,            // Цель в монетах для разблокировки
+            
+            // Состояние
+            isBlocked: false,
+            timeLeft: 15 * 60,
+            coinsNeeded: 300,
+            currentSponsors: {},         // Спонсоры текущей блокировки
+            activeSponsors: [],          // Спонсоры, которые отображаются в бегущей строке
+            timerInterval: null,
+            socket: null,                // WebSocket соединение
+
+            // Элементы DOM
+            elBlockedScreen: document.getElementById('blocked-screen'),
+            elCoinsLeft: document.getElementById('coins-left'),
+            elProgressBar: document.getElementById('progress-bar'),
+            elCurrentDonors: document.getElementById('current-donors'),
+            elSponsorsBar: document.getElementById('sponsors-bar'),
+            elSponsorsList: document.getElementById('sponsors-list'),
+            elDebugTimer: document.getElementById('debug-timer'),
+
+            init() {
+                // Получаем юзернейм из URL, например: ?user=my_tiktok_name
+                const urlParams = new URLSearchParams(window.location.search);
+                const username = urlParams.get('user');
+                
+                if (!username) {
+                    alert("Укажите юзернейм стримера в ссылке!\nПример: ?user=your_name");
+                    return;
+                }
+
+                console.log(`Инициализация для пользователя: ${username}`);
+
+                this.resetTimer();
+                this.startTimer();
+                
+                // Подключение к серверу
+                this.connectToServer(username);
+            },
+
+            startTimer() {
+                if (this.timerInterval) clearInterval(this.timerInterval);
+                
+                this.timerInterval = setInterval(() => {
+                    if (!this.isBlocked) {
+                        this.timeLeft--;
+                        this.elDebugTimer.innerText = this.timeLeft;
+                        
+                        if (this.timeLeft <= 0) {
+                            this.triggerBlock();
+                        }
+                    }
+                }, 1000);
+            },
+
+            resetTimer() {
+                this.timeLeft = this.BLOCK_INTERVAL_SEC;
+                this.elDebugTimer.innerText = this.timeLeft;
+            },
+
+            triggerBlock() {
+                this.isBlocked = true;
+                this.coinsNeeded = this.GOAL_AMOUNT;
+                this.currentSponsors = {}; // Очищаем список для новых сборов
+                
+                // Обновляем UI
+                this.updateBlockUI();
+                this.elCurrentDonors.innerHTML = '';
+                this.elBlockedScreen.classList.add('active');
+                this.elSponsorsBar.classList.add('hidden'); // Прячем прошлых спонсоров
+            },
+
+            unblock() {
+                this.isBlocked = false;
+                this.elBlockedScreen.classList.remove('active');
+                
+                // Формируем список спонсоров следующих 15 минут
+                this.activeSponsors = Object.entries(this.currentSponsors)
+                    .map(([name, amount]) => `${name} (${amount})`);
+                
+                if (this.activeSponsors.length > 0) {
+                    this.elSponsorsList.innerText = this.activeSponsors.join(' • ');
+                    this.elSponsorsBar.classList.remove('hidden');
+                } else {
+                    this.elSponsorsBar.classList.add('hidden');
+                }
+
+                // Сбрасываем таймер для следующей блокировки
+                this.resetTimer();
+            },
+
+            handleGift(nickname, amount) {
+                if (!this.isBlocked) return;
+
+                this.coinsNeeded = Math.max(0, this.coinsNeeded - amount);
+                
+                if (this.currentSponsors[nickname]) {
+                    this.currentSponsors[nickname] += amount;
+                } else {
+                    this.currentSponsors[nickname] = amount;
+                }
+
+                this.updateBlockUI();
+
+                if (this.coinsNeeded <= 0) {
+                    setTimeout(() => this.unblock(), 1000);
+                }
+            },
+
+            updateBlockUI() {
+                this.elCoinsLeft.innerText = this.coinsNeeded;
+                
+                const collected = this.GOAL_AMOUNT - this.coinsNeeded;
+                const percent = Math.min(100, (collected / this.GOAL_AMOUNT) * 100);
+                this.elProgressBar.style.width = `${percent}%`;
+
+                this.elCurrentDonors.innerHTML = Object.entries(this.currentSponsors)
+                    .map(([name, amount]) => `
+                        <span class="bg-gray-700 px-3 py-1 rounded-full text-sm font-semibold border border-gray-500 shadow-sm">
+                            ${name}: <span class="text-[#00f2fe]">${amount}</span>
+                        </span>
+                    `).join('');
+            },
+
+            // ==========================================
+            // ПОДКЛЮЧЕНИЕ К НАШЕМУ НОВОМУ СЕРВЕРУ
+            // ==========================================
+            connectToServer(username) {
+                // Автоматически определяем адрес сервера (работает и локально, и на Railway)
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+                
+                console.log(`Подключение к ${wsUrl}...`);
+                this.socket = new WebSocket(wsUrl);
+
+                this.socket.onopen = () => {
+                    console.log('Подключено к WebSocket. Передаем юзернейм:', username);
+                    // Говорим серверу, к какому стримеру нужно подключиться
+                    this.socket.send(JSON.stringify({ type: 'set_user', username: username }));
+                };
+
+                this.socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'gift') {
+                        this.handleGift(data.nickname, data.diamondCount);
+                    } else if (data.type === 'connected') {
+                        console.log('Сервер успешно подключился к стриму TikTok!');
+                    } else if (data.type === 'error') {
+                        console.error('Ошибка от сервера:', data.message);
+                    }
+                };
+
+                this.socket.onclose = () => {
+                    console.log('Соединение потеряно. Переподключение через 5 секунд...');
+                    setTimeout(() => this.connectToServer(username), 5000);
+                };
+            },
+
+            simulateGift() {
+                this.handleGift('TestUser', 50);
+            }
+        };
+
+        window.onload = () => app.init();
+    </script>
+</body>
+</html>
