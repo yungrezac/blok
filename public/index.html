@@ -8,6 +8,14 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
         
+        :root {
+            /* НАСТРОЙКИ КРУЖКА ДЛЯ КАМЕРЫ */
+            --cam-x: 50%;             /* Позиция по горизонтали (50% = по центру) */
+            --cam-y: 120px;           /* Позиция по вертикали сверху */
+            --cam-radius: 110px;      /* Радиус круга на ПК */
+            --cam-radius-mobile: 75px; /* Радиус круга на телефонах */
+        }
+
         body {
             margin: 0;
             padding: 0;
@@ -27,22 +35,6 @@
             animation: pulse-red 2s infinite;
         }
 
-        /* Анимация сдвига для бегущей строки спонсоров */
-        .marquee-container {
-            overflow: hidden;
-            white-space: nowrap;
-        }
-
-        .marquee-content {
-            display: inline-block;
-            animation: marquee 15s linear infinite;
-        }
-
-        @keyframes marquee {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-        }
-
         /* Прозрачность при нормальном состоянии */
         #normal-screen {
             position: absolute;
@@ -53,7 +45,7 @@
             transition: opacity 0.5s ease;
         }
 
-        /* Черный экран блокировки */
+        /* Черный экран блокировки с вырезом для камеры */
         #blocked-screen {
             position: absolute;
             inset: 0;
@@ -65,11 +57,31 @@
             z-index: 50;
             opacity: 0;
             transition: opacity 0.5s ease;
+            padding: 20px; /* Отступы по бокам, чтобы текст не прилипал к краям */
+            
+            /* CSS маска для создания прозрачного круга под вебкамеру */
+            -webkit-mask-image: radial-gradient(circle at var(--cam-x) var(--cam-y), transparent var(--cam-radius), black calc(var(--cam-radius) + 1px));
+            mask-image: radial-gradient(circle at var(--cam-x) var(--cam-y), transparent var(--cam-radius), black calc(var(--cam-radius) + 1px));
         }
         
         #blocked-screen.active {
             display: flex;
             opacity: 1;
+        }
+
+        /* Адаптация под телефоны */
+        @media (max-width: 640px) {
+            #blocked-screen {
+                padding-top: 160px; /* Сдвигаем контент ниже кружка */
+                -webkit-mask-image: radial-gradient(circle at var(--cam-x) 90px, transparent var(--cam-radius-mobile), black calc(var(--cam-radius-mobile) + 1px));
+                mask-image: radial-gradient(circle at var(--cam-x) 90px, transparent var(--cam-radius-mobile), black calc(var(--cam-radius-mobile) + 1px));
+            }
+        }
+        
+        @media (min-width: 641px) {
+            #blocked-screen {
+                padding-top: 220px; /* Сдвигаем контент ниже кружка для больших экранов */
+            }
         }
 
         /* Панель для тестирования (скрыта в OBS, видна при наведении мышкой) */
@@ -93,51 +105,43 @@
 
     <!-- Экран обычной трансляции (прозрачный) -->
     <div id="normal-screen">
-        <!-- Список спонсоров снизу -->
-        <div id="sponsors-bar" class="bg-black/60 backdrop-blur-sm border-t border-[#ff0050] p-3 text-lg font-bold shadow-lg hidden">
-            <div class="flex items-center">
-                <span class="text-[#00f2fe] mr-4 whitespace-nowrap">Спонсоры следующих 15 минут:</span>
-                <div class="marquee-container flex-1">
-                    <div id="sponsors-list" class="marquee-content text-white">
-                        <!-- Здесь будут спонсоры -->
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Спонсоры убраны по запросу -->
     </div>
 
     <!-- Черный экран блокировки -->
     <div id="blocked-screen">
-        <h1 class="text-6xl md:text-8xl font-black mb-6 text-tiktok-red uppercase tracking-wider text-center">
+        <!-- Изменил размеры текста: для телефонов text-4xl, для ПК text-8xl. Добавлено px-4 для отступов -->
+        <h1 class="text-4xl sm:text-6xl md:text-8xl font-black mb-4 sm:mb-6 text-tiktok-red uppercase tracking-wider text-center break-words w-full px-4">
             Просмотр<br>Заблокирован
         </h1>
-        <p class="text-2xl md:text-3xl font-bold mb-8 text-center text-gray-300">
-            Для продолжения стрима пополните на <span class="text-[#00f2fe] text-4xl">300</span> монет
+        
+        <p class="text-xl sm:text-2xl md:text-3xl font-bold mb-6 sm:mb-8 text-center text-gray-300 px-4">
+            Для продолжения пополните на <span class="text-[#00f2fe] text-3xl sm:text-4xl">300</span> монет
         </p>
         
-        <div class="bg-gray-800 rounded-full w-3/4 max-w-2xl h-12 relative overflow-hidden mb-4 border-2 border-gray-600">
+        <div class="bg-gray-800 rounded-full w-full sm:w-3/4 max-w-2xl h-10 sm:h-12 relative overflow-hidden mb-4 border-2 border-gray-600">
             <div id="progress-bar" class="bg-gradient-to-r from-[#ff0050] to-[#00f2fe] h-full w-0 transition-all duration-500 ease-out"></div>
-            <div class="absolute inset-0 flex items-center justify-center font-bold text-xl drop-shadow-md">
-                Осталось: <span id="coins-left" class="ml-2 text-2xl">300</span>
+            <div class="absolute inset-0 flex items-center justify-center font-bold text-lg sm:text-xl drop-shadow-md">
+                Осталось: <span id="coins-left" class="ml-2 text-xl sm:text-2xl">300</span>
             </div>
         </div>
         
-        <div class="mt-8 text-gray-400 text-lg">
+        <div class="mt-4 sm:mt-8 text-gray-400 text-base sm:text-lg text-center px-4">
             Отправляйте подарки, чтобы разблокировать экран!
         </div>
         
         <!-- Мини-список тех, кто уже скинул во время блокировки -->
-        <div id="current-donors" class="mt-6 flex flex-wrap gap-2 justify-center max-w-3xl">
-            <!-- Доноры -->
+        <div id="current-donors" class="mt-6 flex flex-wrap gap-2 justify-center max-w-3xl w-full px-2">
+            <!-- Доноры будут появляться здесь -->
         </div>
     </div>
 
     <!-- Дебаг панель (для тестирования) -->
     <div id="debug-panel">
-        <div class="text-xs text-gray-400 mb-2">DEBUG PANEL (Наведите для использования)</div>
+        <div class="text-xs text-gray-400 mb-2">DEBUG PANEL (Наведите)</div>
         <div class="text-white mb-2">Таймер до блокировки: <span id="debug-timer">900</span> сек.</div>
-        <button onclick="app.triggerBlock()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm mr-2">Вызвать блокировку</button>
-        <button onclick="app.simulateGift()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">Симулировать подарок (50)</button>
+        <button onclick="app.triggerBlock()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm mr-2">Заблокировать</button>
+        <button onclick="app.simulateGift()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm mt-2">Симулировать донат</button>
     </div>
 
     <script>
@@ -152,36 +156,33 @@
             timeLeft: 15 * 60,
             coinsNeeded: 300,
             currentSponsors: {},         // Спонсоры текущей блокировки
-            activeSponsors: [],          // Спонсоры, которые отображаются в бегущей строке
             timerInterval: null,
-            socket: null,                // WebSocket соединение
+            socket: null,
 
             // Элементы DOM
             elBlockedScreen: document.getElementById('blocked-screen'),
             elCoinsLeft: document.getElementById('coins-left'),
             elProgressBar: document.getElementById('progress-bar'),
             elCurrentDonors: document.getElementById('current-donors'),
-            elSponsorsBar: document.getElementById('sponsors-bar'),
-            elSponsorsList: document.getElementById('sponsors-list'),
             elDebugTimer: document.getElementById('debug-timer'),
 
             init() {
-                // Получаем юзернейм из URL, например: ?user=my_tiktok_name
                 const urlParams = new URLSearchParams(window.location.search);
                 const username = urlParams.get('user');
                 
                 if (!username) {
-                    alert("Укажите юзернейм стримера в ссылке!\nПример: ?user=your_name");
-                    return;
+                    // Для локального теста, если забыли добавить ?user=
+                    console.warn("Юзернейм не указан! Работает в режиме симуляции.");
+                } else {
+                    console.log(`Инициализация для пользователя: ${username}`);
                 }
-
-                console.log(`Инициализация для пользователя: ${username}`);
 
                 this.resetTimer();
                 this.startTimer();
                 
-                // Подключение к серверу
-                this.connectToServer(username);
+                if (username) {
+                    this.connectToServer(username);
+                }
             },
 
             startTimer() {
@@ -213,25 +214,12 @@
                 this.updateBlockUI();
                 this.elCurrentDonors.innerHTML = '';
                 this.elBlockedScreen.classList.add('active');
-                this.elSponsorsBar.classList.add('hidden'); // Прячем прошлых спонсоров
             },
 
             unblock() {
                 this.isBlocked = false;
                 this.elBlockedScreen.classList.remove('active');
-                
-                // Формируем список спонсоров следующих 15 минут
-                this.activeSponsors = Object.entries(this.currentSponsors)
-                    .map(([name, amount]) => `${name} (${amount})`);
-                
-                if (this.activeSponsors.length > 0) {
-                    this.elSponsorsList.innerText = this.activeSponsors.join(' • ');
-                    this.elSponsorsBar.classList.remove('hidden');
-                } else {
-                    this.elSponsorsBar.classList.add('hidden');
-                }
-
-                // Сбрасываем таймер для следующей блокировки
+                // Спонсоры больше не показываются снизу, сразу сбрасываем таймер
                 this.resetTimer();
             },
 
@@ -249,7 +237,7 @@
                 this.updateBlockUI();
 
                 if (this.coinsNeeded <= 0) {
-                    setTimeout(() => this.unblock(), 1000);
+                    setTimeout(() => this.unblock(), 1000); // 1 сек задержка для красоты
                 }
             },
 
@@ -262,17 +250,13 @@
 
                 this.elCurrentDonors.innerHTML = Object.entries(this.currentSponsors)
                     .map(([name, amount]) => `
-                        <span class="bg-gray-700 px-3 py-1 rounded-full text-sm font-semibold border border-gray-500 shadow-sm">
+                        <span class="bg-gray-700 px-3 py-1 rounded-full text-sm font-semibold border border-gray-500 shadow-sm text-white">
                             ${name}: <span class="text-[#00f2fe]">${amount}</span>
                         </span>
                     `).join('');
             },
 
-            // ==========================================
-            // ПОДКЛЮЧЕНИЕ К НАШЕМУ НОВОМУ СЕРВЕРУ
-            // ==========================================
             connectToServer(username) {
-                // Автоматически определяем адрес сервера (работает и локально, и на Railway)
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${protocol}//${window.location.host}`;
                 
@@ -281,7 +265,6 @@
 
                 this.socket.onopen = () => {
                     console.log('Подключено к WebSocket. Передаем юзернейм:', username);
-                    // Говорим серверу, к какому стримеру нужно подключиться
                     this.socket.send(JSON.stringify({ type: 'set_user', username: username }));
                 };
 
